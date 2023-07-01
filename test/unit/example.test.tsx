@@ -4,12 +4,14 @@ import { render, waitFor } from "@testing-library/react";
 import { rest } from "msw";
 import { setupServer } from "msw/node";
 import { Provider } from "react-redux";
+import "@testing-library/jest-dom/extend-expect";
 import { MemoryRouter } from "react-router";
 import { Application } from "../../src/client/Application";
 import { ExampleApi, CartApi } from "../../src/client/api";
 import { ApplicationState, initStore } from "../../src/client/store";
 import events from "@testing-library/user-event";
 import { Action, Store } from "redux";
+import { q } from "msw/lib/glossary-de6278a9";
 
 const products = [
   {
@@ -217,12 +219,11 @@ describe("Отображение товаров в каталоге", () => {
     await waitFor(() => {
       for (let productId = 0; productId < products.length; productId++) {
         const product = queryAllByTestId(`${productId}`);
-        const style = getComputedStyle(product[0]);
-        const displayed = style.getPropertyValue("display") !== "none";
-        expect(displayed).toBe(true);
+        expect(product[0]).toBeVisible();
       }
     });
   });
+
   it("Для каждого товара в каталоге отображается название, цена и ссылка на страницу с подробной информацией о товаре", async () => {
     const api = new ExampleApi("/hw/store");
     const cartApi = new CartApi();
@@ -239,13 +240,12 @@ describe("Отображение товаров в каталоге", () => {
         ];
 
         for (let i = 0; i < info.length; i++) {
-          const style = getComputedStyle(info[i]);
-          const displayed = style.getPropertyValue("display") !== "none";
-          expect(displayed).toBe(true);
+          expect(info[i]).toBeVisible();
         }
       }
     });
   });
+
   it(`На странице с подробной информацией отображаются: название товара, его описание, цена, цвет, материал и кнопка * * "добавить в корзину"`, async () => {
     const api = new ExampleApi("/hw/store");
     const cartApi = new CartApi();
@@ -263,9 +263,7 @@ describe("Отображение товаров в каталоге", () => {
         ];
 
         for (let i = 0; i < info.length; i++) {
-          const style = getComputedStyle(info[i]);
-          const displayed = style.getPropertyValue("display") !== "none";
-          expect(displayed).toBe(true);
+          expect(info[i]).toBeVisible();
         }
       });
     }
@@ -273,7 +271,7 @@ describe("Отображение товаров в каталоге", () => {
 });
 
 describe("Добавление товара в корзину", () => {
-  it(`При нажатии на кнопку "добавить в корзину" товар добавляется в корзину`, async () => {
+  it(`При нажатии на кнопку "Add to cart" товар добавляется в корзину`, async () => {
     const api = new ExampleApi("/hw/store");
     const cartApi = new CartApi();
     const store = initStore(api, cartApi);
@@ -286,9 +284,176 @@ describe("Добавление товара в корзину", () => {
       await events.click(addButton);
 
       const product = queryByTestId(`0`);
-      const style = getComputedStyle(product);
-      const displayed = style.getPropertyValue("display") !== "none";
-      expect(displayed).toBe(true);
+      expect(product).toBeVisible();
     });
+  });
+  it(`Если товар уже добавлен в корзину, в каталоге и на странице товара должно отображаться сообщение об этом`, async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+
+    const { container } = setupPage("/catalog", 0, api, cartApi, store);
+    const { queryByTestId } = setupPage("/cart", -1, api, cartApi, store);
+
+    await waitFor(async () => {
+      const addButton = container.querySelector(".ProductDetails-AddToCart");
+      await events.click(addButton);
+
+      {
+        const { container } = setupPage("/catalog", -1, api, cartApi, store);
+        const cartBadge = container.querySelector(".CartBadge");
+
+        expect(cartBadge).toBeVisible();
+      }
+      const cartBadge = container.querySelector(".CartBadge");
+
+      expect(cartBadge).toBeVisible();
+    });
+  });
+
+  it(`Если товар уже добавлен в корзину, повторное нажатие кнопки "добавить в корзину" должно увеличивать его количество`, async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+
+    const { container } = setupPage("/catalog", 0, api, cartApi, store);
+    const { queryByTestId } = setupPage("/cart", -1, api, cartApi, store);
+
+    await waitFor(async () => {
+      const addButton = container.querySelector(".ProductDetails-AddToCart");
+      await events.click(addButton);
+
+      const product = queryByTestId(`0`);
+      await events.click(addButton);
+      const count = product.querySelector(".Cart-Count");
+      expect(count.innerHTML).toBe("2");
+    });
+  });
+
+  it("Содержимое корзины должно сохраняться между перезагрузками страницы", async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+
+    const { container } = setupPage("/catalog", 0, api, cartApi, store);
+    let { queryByTestId } = setupPage("/cart", -1, api, cartApi, store);
+
+    await waitFor(async () => {
+      const addButton = container.querySelector(".ProductDetails-AddToCart");
+      await events.click(addButton);
+
+      const product = queryByTestId(`0`);
+      await events.click(addButton);
+      {
+        let { queryByTestId } = setupPage("/cart", -1, api, cartApi, store);
+        const count = product.querySelector(".Cart-Count");
+        expect(count.innerHTML).toBe("2");
+      }
+    });
+  });
+});
+
+describe("Отображение товаров в корзине", () => {
+  it("В шапке рядом со ссылкой на корзину должно отображаться количество не повторяющихся товаров в ней", async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+
+    for (let i = 0; i < 5; i++) {
+      await waitFor(async () => {
+        const { container } = setupPage("/catalog", i, api, cartApi, store);
+        const addButton = container.querySelector(".ProductDetails-AddToCart");
+        await events.click(addButton);
+
+        if (i === 5) {
+          const cartLink = container.querySelector(".nav-link[href='/cart']");
+          const count = cartLink.innerHTML
+            .split(" ")[1]
+            .replace("(", "")
+            .replace(")", "");
+
+          expect(count).toBe("5");
+        }
+      });
+    }
+  });
+
+  it("В корзине должна отображаться таблица с добавленными в нее товарами", async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+
+    for (let i = 0; i < 5; i++) {
+      await waitFor(async () => {
+        const { container } = setupPage("/catalog", i, api, cartApi, store);
+
+        const addButton = container.querySelector(".ProductDetails-AddToCart");
+        await events.click(addButton);
+
+        if (i === 5) {
+          let { queryByTestId, container } = setupPage(
+            "/cart",
+            -1,
+            api,
+            cartApi,
+            store
+          );
+          const table = container.querySelector(".Cart-Table");
+          expect(table).toBeVisible();
+
+          for (let productId = 0; productId < 5; productId++) {
+            const product = queryByTestId(`${productId}`);
+            const info = [
+              product.querySelector(".Cart-Name"),
+              product.querySelector(".Cart-Price"),
+              product.querySelector(".Cart-Count"),
+              product.querySelector(".Cart-Total"),
+            ];
+
+            for (let i = 0; i < info.length; i++) {
+              expect(info[i]).toBeVisible();
+            }
+          }
+        }
+      });
+    }
+  });
+});
+
+describe("Удаление товаров из корзины", () => {
+  it(`В корзине должна быть кнопка "очистить корзину", по нажатию на которую все товары должны удаляться`, async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+    for (let i = 0; i < 5; i++) {
+      await waitFor(async () => {
+        const { container } = setupPage("/catalog", i, api, cartApi, store);
+        const addButton = container.querySelector(".ProductDetails-AddToCart");
+        await events.click(addButton);
+
+        if (i === 5) {
+          const { container } = setupPage("/cart", -1, api, cartApi, store);
+          const cartClearButton = container.querySelector(".Cart-Clear");
+          await events.click(cartClearButton);
+          const cartLink = container.querySelector(".nav-link[href='/cart']");
+
+          const count = cartLink.innerHTML
+            .split(" ")[1]
+            .replace("(", "")
+            .replace(")", "");
+
+          expect(count).toBe("");
+        }
+      });
+    }
+  });
+  it(`Если корзина пустая, должна отображаться ссылка на каталог товаров`, async () => {
+    const api = new ExampleApi("/hw/store");
+    const cartApi = new CartApi();
+    const store = initStore(api, cartApi);
+
+    const { container } = setupPage("/cart", -1, api, cartApi, store);
+    const catalogLink = container.querySelector("a[href='/cart']");
+    expect(catalogLink).toBeVisible();
   });
 });
