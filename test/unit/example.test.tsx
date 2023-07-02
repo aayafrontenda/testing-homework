@@ -11,7 +11,6 @@ import { ExampleApi } from "../../src/client/api";
 import { ApplicationState, initStore } from "../../src/client/store";
 import events from "@testing-library/user-event";
 import { Action, Store } from "redux";
-import { q } from "msw/lib/glossary-de6278a9";
 import { CART_STATE, EMPTY_CART_STATE, MockCartApi } from "./mockCartApi";
 
 const products = [
