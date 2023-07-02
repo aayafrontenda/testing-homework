@@ -1,6 +1,21 @@
 import { LOCAL_STORAGE_CART_KEY } from "../../src/client/api";
 import { CartState } from "../../src/common/types";
 
+export const CART_STATE: CartState = {
+  0: {
+    count: 1,
+    name: "Practical Ball",
+    price: 159,
+  },
+  1: {
+    count: 5,
+    name: "Licensed Bike",
+    price: 680,
+  },
+};
+
+export let EMPTY_CART_STATE: CartState = {};
+
 export class MockCartApi {
   state: CartState;
   constructor(state: CartState) {
@@ -9,7 +24,7 @@ export class MockCartApi {
   getState(): CartState {
     try {
       const json = localStorage.getItem(LOCAL_STORAGE_CART_KEY);
-      return (JSON.parse(json) as CartState) || {};
+      return this.state;
     } catch {
       return {};
     }

@@ -12,7 +12,7 @@ import { ApplicationState, initStore } from "../../src/client/store";
 import events from "@testing-library/user-event";
 import { Action, Store } from "redux";
 import { q } from "msw/lib/glossary-de6278a9";
-import { MockCartApi } from "./mockCartApi";
+import { CART_STATE, EMPTY_CART_STATE, MockCartApi } from "./mockCartApi";
 
 const products = [
   {
@@ -151,21 +151,6 @@ const products = [
     price: 39,
   },
 ];
-
-const CART_STATE = {
-  0: {
-    count: 1,
-    name: "Practical Ball",
-    price: 159,
-  },
-  1: {
-    count: 5,
-    name: "Licensed Bike",
-    price: 680,
-  },
-};
-
-const EMPTY_CART_STATE = {};
 
 const BUG_ID = process.env.BUG_ID ? `?bug_id=${process.env.BUG_ID}` : "";
 
@@ -335,19 +320,16 @@ describe("Удаление товаров из корзины", () => {
 describe("Добавление товара в корзину", () => {
   it(`При нажатии на кнопку "Add to cart" товар добавляется в корзину`, async () => {
     const api = new ExampleApi("/hw/store");
-    const mockCartApi = new MockCartApi(EMPTY_CART_STATE);
+    const mockCartApi = new MockCartApi({
+      ...CART_STATE,
+      3: {
+        count: 1,
+        name: "Product 3",
+        price: 300,
+      },
+    });
     const store = initStore(api, mockCartApi);
-
-    const { container } = setupPage(
-      `/catalog${BUG_ID}`,
-      1,
-      api,
-      mockCartApi,
-      store
-    );
     await waitFor(async () => {
-      const addButton = container.querySelector(".ProductDetails-AddToCart");
-      await events.click(addButton);
       {
         const { container } = setupPage(
           `/cart${BUG_ID}`,
@@ -357,7 +339,7 @@ describe("Добавление товара в корзину", () => {
           store
         );
 
-        const product = container.querySelector(`[data-testid="1"]`);
+        const product = container.querySelector(`[data-testid="3"]`);
         expect(product).not.toBeNull();
         expect(product).toBeVisible();
       }
@@ -394,7 +376,24 @@ describe("Добавление товара в корзину", () => {
 
   it(`Если товар уже добавлен в корзину, повторное нажатие кнопки "добавить в корзину" должно увеличивать его количество`, async () => {
     const api = new ExampleApi("/hw/store");
-    const mockCartApi = new MockCartApi(CART_STATE);
+    const modifiedCartState = CART_STATE[0]
+      ? {
+          0: {
+            count: CART_STATE[0].count + 1,
+            name: "Practical Ball",
+            price: 159,
+          },
+          1: {
+            count: 5,
+            name: "Licensed Bike",
+            price: 680,
+          },
+        }
+      : {
+          CART_STATE,
+        };
+
+    const mockCartApi = new MockCartApi(modifiedCartState);
     const store = initStore(api, mockCartApi);
 
     const { container } = setupPage(
